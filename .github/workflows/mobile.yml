@@ -3,7 +3,8 @@
 #   - Android: an APK, in this repo's `android` release, kept a pre-release so it never becomes
 #     "Latest" (the website's links and the desktop app's updates follow only the desktop's
 #     releases); releases/download/android/HADI.apk is always the newest;
-#   - iOS: an App Store build, uploaded straight to TestFlight.
+#   - iOS: an App Store build, uploaded straight to TestFlight and, only when the run asks for it
+#     (`review`), submitted to App Review for the App Store.
 # Builds run with EAS's own build tools on these runners (`eas build --local`), which don't count
 # against the Expo plan's build limit. Signing keys and build numbers still come from EAS, so a
 # build here is the same as one in Expo's cloud.
@@ -11,14 +12,16 @@
 # Canonical copy: hey-hadi/Hadi → hadi-desktop/releases-repo/.github/workflows/mobile.yml. Edit it
 # there, then copy it here.
 #
-# Started by hey-hadi/Hadi's "Mobile release" workflow (a repository_dispatch on every push to main
-# that changes the phone app), or by hand: Actions → Build HADI mobile → Run workflow.
+# Started by hey-hadi/Hadi's "Mobile release" workflow (a repository_dispatch: Android on every push
+# to main that changes the phone app, iOS only when someone runs it by hand), or by hand: Actions → Build HADI mobile → Run workflow.
 #
 # Secrets: the desktop's own, plus the Expo token:
 #   HADI_SOURCE_TOKEN            (the desktop's) reads hey-hadi/Hadi
 #   APPLE_ID                     (the desktop's) the Apple ID it notarizes with
 #   APPLE_APP_SPECIFIC_PASSWORD  (the desktop's) its app-specific password: uploads to TestFlight
 #   EXPO_TOKEN                   expo.dev → Access tokens: the app's signing keys and build numbers
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   an App Store Connect API key (App Manager; the .p8's
+#                                contents): only for submitting to App Review
 # Without the Apple ones the iOS job stops before building (an App Store build is never kept here:
 # this repo is public).
 #
@@ -42,6 +45,11 @@ on:
         default: both
         type: choice
         options: [both, android, ios]
+      review:
+        description: Submit the iPhone build to App Review (the App Store)
+        required: false
+        default: false
+        type: boolean
 
 # One build at a time (apart from the desktop's); if several pile up, only the newest waits, so the
 # latest commit always ships.
@@ -66,6 +74,7 @@ jobs:
       sha: ${{ steps.pick.outputs.sha }}
       android: ${{ steps.pick.outputs.android }}
       ios: ${{ steps.pick.outputs.ios }}
+      review: ${{ steps.pick.outputs.review }}
     steps:
       - name: Check the required secrets are set
         env:
@@ -91,6 +100,7 @@ jobs:
           TOKEN: ${{ secrets.HADI_SOURCE_TOKEN }}
           REF: ${{ github.event.client_payload.ref || inputs.ref || 'main' }}
           PLATFORMS: ${{ github.event.client_payload.platforms || inputs.platforms || 'both' }}
+          REVIEW: ${{ github.event.client_payload.review == 'true' || inputs.review == true }}
         run: |
           set -euo pipefail
           sha=$(curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github.sha" \
@@ -98,6 +108,7 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "android=$([ "$PLATFORMS" = ios ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
           echo "ios=$([ "$PLATFORMS" = android ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+          echo "review=$REVIEW" >> "$GITHUB_OUTPUT"
           echo "Building \`${sha:0:8}\` ($PLATFORMS)" >> "$GITHUB_STEP_SUMMARY"
 
   android:
@@ -181,6 +192,17 @@ jobs:
             exit 1
           fi
 
+      # Checked before the build, so a submission that can't be made doesn't cost a build.
+      - name: Check the App Store Connect key is set
+        if: needs.prepare.outputs.review == 'true'
+        env:
+          HAS_ASC: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' }}
+        run: |
+          if [ "$HAS_ASC" != "true" ]; then
+            echo "::error title=Missing secret::Add ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 (an App Store Connect API key with the App Manager role) to submit to App Review."
+            exit 1
+          fi
+
       - name: Fetch the source
         env:
           TOKEN: ${{ secrets.HADI_SOURCE_TOKEN }}
@@ -222,3 +244,30 @@ jobs:
           xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/HADI.ipa" \
             --username "$APPLE_ID" --password "@env:APPLE_APP_SPECIFIC_PASSWORD"
           echo "Uploaded to TestFlight. It shows there once Apple has processed it (usually 5-15 minutes)." >> "$GITHUB_STEP_SUMMARY"
+
+      # Only when the run asked for it. The app's page (words, screenshots, privacy answers, the
+      # reviewer's notes) is whatever App Store Connect holds: this only picks the build just
+      # uploaded, once Apple has processed it, and submits that version for review.
+      - name: Submit to App Review
+        if: needs.prepare.outputs.review == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/review"
+          mkdir -p "$work" && cd "$work"
+          unzip -q -o "$RUNNER_TEMP/HADI.ipa" 'Payload/*.app/Info.plist'
+          plist=$(ls Payload/*.app/Info.plist)
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
+          jq -n --arg id "$ASC_KEY_ID" --arg issuer "$ASC_ISSUER_ID" --arg key "$ASC_KEY_P8" \
+            '{key_id: $id, issuer_id: $issuer, key: $key, in_house: false}' > key.json
+          trap 'rm -f "$work/key.json"' EXIT
+          fastlane deliver --api_key_path key.json --app_identifier "$bundle" \
+            --app_version "$version" --build_number "$build" \
+            --skip_binary_upload --skip_metadata --skip_screenshots \
+            --submit_for_review --run_precheck_before_submit false --force
+          echo "Version $version ($build) submitted to App Review." >> "$GITHUB_STEP_SUMMARY"
