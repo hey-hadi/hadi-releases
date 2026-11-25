@@ -281,7 +281,7 @@ jobs:
           SIGNED: ${{ secrets.CSC_LINK != '' }}
         run: |
           set -euo pipefail
-          app=$(ls -d release/mac*/HADI.app | head -n 1)
+          app=$(ls -d release/mac*/Hadi.app | head -n 1)
           if [ "$SIGNED" = "true" ]; then
             codesign --verify --deep --strict --verbose=2 "$app"
             # Passes only for a Developer ID app Apple has notarized — what a downloaded copy needs.
