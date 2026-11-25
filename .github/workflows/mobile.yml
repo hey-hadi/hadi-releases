@@ -168,9 +168,11 @@ jobs:
           title="HADI for Android · build ${GITHUB_RUN_NUMBER}"
           notes="Built from \`${SHA:0:8}\`. Install it on an Android phone: open this page there and tap Hadi.apk."
           if gh release view android --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload android "$RUNNER_TEMP/Hadi.apk" --repo "$GITHUB_REPOSITORY" --clobber
-            # The file used to be HADI.apk: take the old one away so it isn't left there as a stale build.
+            # The file used to be HADI.apk. GitHub ignores case in asset names, so the old one has to go
+            # BEFORE Hadi.apk goes up (--clobber only replaces a name written exactly the same), and
+            # it isn't left there as a stale build either.
             gh release delete-asset android HADI.apk --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+            gh release upload android "$RUNNER_TEMP/Hadi.apk" --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit android --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes" --prerelease --latest=false
           else
             gh release create android "$RUNNER_TEMP/Hadi.apk" --repo "$GITHUB_REPOSITORY" \
