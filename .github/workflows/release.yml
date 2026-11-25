@@ -281,7 +281,7 @@ jobs:
           SIGNED: ${{ secrets.CSC_LINK != '' }}
         run: |
           set -euo pipefail
-          app=$(ls -d release/mac*/HADI.app | head -n 1)
+          app=$(ls -d release/mac*/Hadi.app | head -n 1)
           if [ "$SIGNED" = "true" ]; then
             codesign --verify --deep --strict --verbose=2 "$app"
             # Passes only for a Developer ID app Apple has notarized — what a downloaded copy needs.
@@ -384,13 +384,13 @@ jobs:
           linux_arm=$(one ./*-arm64.AppImage)
           deb=$(one ./*-amd64.deb)
           deb_arm=$(one ./*-arm64.deb)
-          cp "$arm" HADI.dmg
-          cp "$intel" HADI-Intel.dmg
-          cp "$win" HADI.exe
-          cp "$linux" HADI.AppImage
-          cp "$linux_arm" HADI-ARM.AppImage
-          cp "$deb" HADI.deb
-          cp "$deb_arm" HADI-ARM.deb
+          cp "$arm" Hadi.dmg
+          cp "$intel" Hadi-Intel.dmg
+          cp "$win" Hadi.exe
+          cp "$linux" Hadi.AppImage
+          cp "$linux_arm" Hadi-ARM.AppImage
+          cp "$deb" Hadi.deb
+          cp "$deb_arm" Hadi-ARM.deb
           ls -la
 
       - name: Publish
@@ -439,11 +439,11 @@ jobs:
           {
             echo "## HADI $VERSION is out"
             echo ""
-            echo "- [Mac (Apple Silicon)](https://github.com/$repo/releases/latest/download/HADI.dmg)"
-            echo "- [Mac (Intel)](https://github.com/$repo/releases/latest/download/HADI-Intel.dmg)"
-            echo "- [Windows](https://github.com/$repo/releases/latest/download/HADI.exe)"
-            echo "- Linux (x64): [.deb](https://github.com/$repo/releases/latest/download/HADI.deb) · [AppImage](https://github.com/$repo/releases/latest/download/HADI.AppImage)"
-            echo "- Linux (arm64): [.deb](https://github.com/$repo/releases/latest/download/HADI-ARM.deb) · [AppImage](https://github.com/$repo/releases/latest/download/HADI-ARM.AppImage)"
+            echo "- [Mac (Apple Silicon)](https://github.com/$repo/releases/latest/download/Hadi.dmg)"
+            echo "- [Mac (Intel)](https://github.com/$repo/releases/latest/download/Hadi-Intel.dmg)"
+            echo "- [Windows](https://github.com/$repo/releases/latest/download/Hadi.exe)"
+            echo "- Linux (x64): [.deb](https://github.com/$repo/releases/latest/download/Hadi.deb) · [AppImage](https://github.com/$repo/releases/latest/download/Hadi.AppImage)"
+            echo "- Linux (arm64): [.deb](https://github.com/$repo/releases/latest/download/Hadi-ARM.deb) · [AppImage](https://github.com/$repo/releases/latest/download/Hadi-ARM.AppImage)"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Keep the newest 20 desktop releases (v…; the phone app's `android` release is mobile.yml's).
