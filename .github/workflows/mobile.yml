@@ -184,11 +184,12 @@ jobs:
     name: iOS to TestFlight
     needs: prepare
     if: needs.prepare.outputs.ios == 'true'
-    # Apple wants builds from the iOS 27 SDK (Xcode 27) from April 2027 (ITMS-90725, in App Store
-    # Connect's email of 24 Nov 2026); the macos-15 and macos-26 images stop at Xcode 26.x. The
-    # `xcode-27` image (macOS 27, Xcode 27.0 to 27.2) is GitHub's preview one: if it ever breaks a
-    # build, put `macos-26` back and build with Xcode 26.6 until Apple's date comes closer.
-    runs-on: xcode-27
+    # Apple will want builds from the iOS 27 SDK (Xcode 27) from April 2027 (ITMS-90725, App Store
+    # Connect's email of 24 Nov 2026). The `xcode-27` image was tried on 25 Nov 2026 and the build
+    # failed: Xcode 27 only accepts iOS deployment targets from 15.0, and some pods still declare
+    # lower ones (RNCAsyncStorage 13.4, RNSVG 12.4, lottie-ios 13.0, SDWebImage 9.0). Until the pods
+    # are raised to 15.0 (a Podfile post_install), builds stay on this image (Xcode 26.x).
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - name: Check the Apple ID is set
@@ -221,7 +222,7 @@ jobs:
           curl -fsSL -H "Authorization: Bearer $TOKEN" "https://api.github.com/repos/$SOURCE_REPO/tarball/$SHA" \
             | tar -xz --strip-components=1 -C "$RUNNER_TEMP/src"
 
-      # The App Store takes only builds from a current Xcode: on this image the newest stable, 27.2.
+      # The App Store takes only builds from a current Xcode.
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
